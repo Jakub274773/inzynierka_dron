@@ -1,0 +1,45 @@
+.program alt
+
+trigger:
+    mov x, ~NULL
+    set pins, 1              ; TRIG = 1
+wait_trig:
+    nop [20]                 ; 10 iteracji = ~10us przy 1MHz
+    set pins, 0              ; TRIG = 0
+
+wait_echo_high:
+    wait 1 pin 0             ; czekaj na HIGH na pinie IN
+
+count_echo:
+    set y, 0                 ; licznik czasu = Y
+
+count_loop:
+    jmp pin add_loop        ; jeśli ECHO = 0 → koniec
+
+add_loop:
+    jmp x-- count_loop
+
+count_end:
+    mov isr, ~x              ; wynik → ISR
+    push                     ; wynik → FIFO
+    jmp trigger              ; wykonaj nowy pomiar
+
+
+    % c-sdk {
+// this is a raw helper function for use by the user which sets up the GPIO output, and configures the SM to output on a particular pin
+
+void alt_init(PIO pio, uint sm, uint offset, uint trig_pin, uint echo_pin)
+{
+    pio_gpio_init(pio, trig_pin);
+    pio_gpio_init(pio, echo_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, trig_pin, 1, true);
+    gpio_set_dir(echo_pin, GPIO_IN);
+    pio_sm_config c = alt_program_get_default_config(offset);
+    sm_config_set_set_pins(&c, trig_pin, 1);
+    sm_config_set_in_pins(&c, echo_pin);
+    sm_config_set_jmp_pin(&c, echo_pin);
+    sm_config_set_clkdiv(&c, 62.5f);
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
