@@ -5,9 +5,22 @@
 #include "hardware/pio.h"
 #include "hardware/dma.h"
 #include "hardware/i2c.h"
+#include "hardware/irq.h"
+#include "hardware/uart.h"
 #include "pico/multicore.h"
 #include "dshot.pio.h"
 #include "alt.pio.h"
+
+//defy dla uart
+#define UART_ID uart0
+#define BAUD_RATE 9600      // musi zgadzać się z RPi Zero
+#define UART_RX_PIN 1       // RX Pico podłączony do TX RPi
+#define UART_TX_PIN 0 
+
+#define BUF_SIZE 64
+char rx_buffer[BUF_SIZE];
+int rx_pos = 0;
+bool new_data = false;
 
 // gdzie sie wykonuje
 PIO pio = pio0;
@@ -23,16 +36,15 @@ uint16_t Preval3;
 uint16_t Preval4;
 
 // wartosci od 0 do 2047
-uint16_t val1;
-uint16_t val2;
-uint16_t val3;
-uint16_t val4;
+volatile uint16_t val1, val2, val3, val4;
+ 
+
 
 // Ramki
-uint16_t eng1;
-uint16_t eng2;
-uint16_t eng3;
-uint16_t eng4;
+volatile uint32_t eng1;
+volatile uint32_t eng2;
+volatile uint32_t eng3;
+volatile uint32_t eng4;
 
 // IMU + DMA + przerwanie
 //presety 
@@ -102,7 +114,25 @@ void steer_by_altitude(){
 
 // przerwanie UART RX
 
+void on_uart_irq() {
+    while (uart_is_readable(UART_ID)) {
+        char c = uart_getc(UART_ID);
 
+        // Przechwytywanie linii kończącej '\n'
+        if (c == '\n' || c == '\r') {
+            rx_buffer[rx_pos] = '\0';  // zakończ string
+            val1 = val2 = val3 = val4 = (uint16_t)strtol(rx_buffer, NULL, 10);
+            //("Odebrano: %d\n");
+            printf("wartos %d", val1);
+            printf("wartos %d", eng1);
+            rx_pos = 0; 
+        } else {
+            if (rx_pos < BUF_SIZE - 1) {
+                rx_buffer[rx_pos++] = c;
+            }
+        }
+    }
+}
 
 
 // silniki dshot
@@ -149,19 +179,20 @@ void start_cycle(){
 
 void program(){
 
+  while(true){
 eng1 = calculate_frame(val1, 0);
 eng2 = calculate_frame(val2, 0);
 eng3 = calculate_frame(val3, 0);
 eng4 = calculate_frame(val4, 0);
-
-i2c_write_blocking(i2c_default, 0x68, &reg, 1, false);
+  }
+//i2c_write_blocking(i2c_default, 0x68, &reg, 1, false);
 }
 
 void init_dma_eng(uint dreq, volatile void * write_addr, const volatile void * read_addr){
   int chan = dma_claim_unused_channel(true);
 
     dma_channel_config c = dma_channel_get_default_config(chan);
-    channel_config_set_transfer_data_size(&c, DMA_SIZE_16);
+    channel_config_set_transfer_data_size(&c, DMA_SIZE_32);
     channel_config_set_read_increment(&c, false);
     channel_config_set_write_increment(&c, false);
     channel_config_set_dreq(&c, dreq);
@@ -179,18 +210,34 @@ void init_dma_eng(uint dreq, volatile void * write_addr, const volatile void * r
 int main()
 
 {
+
+    multicore_launch_core1(program);
   // Inicjalizacja pinow
     stdio_init_all();
     uint offset = pio_add_program(pio, &dshot_program);
-    dshot_program_init(pio, sm1, offset, 6, true);
-    dshot_program_init(pio, sm2, offset, 7, true);
-    dshot_program_init(pio, sm3, offset, 8, true);
-    dshot_program_init(pio, sm4, offset, 9, true);
+    dshot_program_init(pio, sm1, offset, 18, true);
+    dshot_program_init(pio, sm2, offset, 19, true);
+    dshot_program_init(pio, sm3, offset, 20, true);
+    dshot_program_init(pio, sm4, offset, 21, true);
     
-    multicore_launch_core1(program);
+    
+
+    uart_init(UART_ID, BAUD_RATE);
+    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
+    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+
+    // Włącz IRQ tylko dla odbioru
+    uart_set_irq_enables(UART_ID, true, false);
+    irq_set_exclusive_handler(UART0_IRQ, on_uart_irq);
+    irq_set_enabled(UART0_IRQ, true);
 
     init_dma_eng(DREQ_PIO0_TX0, &pio0->txf[sm1], &eng1);
     init_dma_eng(DREQ_PIO0_TX1, &pio0->txf[sm2], &eng2);
     init_dma_eng(DREQ_PIO0_TX2, &pio0->txf[sm3], &eng3);
     init_dma_eng(DREQ_PIO0_TX3, &pio0->txf[sm4], &eng4);
+
+    while(true){
+      tight_loop_contents();
+    }
+    return 0;
 }
