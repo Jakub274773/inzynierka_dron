@@ -79,7 +79,8 @@ void imu_dma_init(){
 // MPU6500
 #define I2C_PORT i2c0
 
-void init_i2c(){
+void init_i2c() {
+    // Start I2C
     i2c_init(i2c_default, 400 * 1000);
     gpio_set_function(PICO_DEFAULT_I2C_SDA_PIN, GPIO_FUNC_I2C);
     gpio_set_function(PICO_DEFAULT_I2C_SCL_PIN, GPIO_FUNC_I2C);
@@ -87,9 +88,21 @@ void init_i2c(){
     gpio_pull_up(PICO_DEFAULT_I2C_SCL_PIN);
     sleep_ms(200);
 
-    int8_t wake_cmd[2] = {0x6B, 0x00};
+    // Wake MPU6500
+    uint8_t wake_cmd[2] = {0x6B, 0x00};
     i2c_write_blocking(I2C_PORT, 0x68, wake_cmd, 2, false);
     sleep_ms(100);
+
+    // Set Gyro DLPF = 41 Hz   (CONFIG register 0x1A)
+    uint8_t dlpf_gyro[2] = {0x1A, 0x03};
+    i2c_write_blocking(I2C_PORT, 0x68, dlpf_gyro, 2, false);
+
+    // Set Accel DLPF = 41 Hz  (ACCEL_CONFIG2 register 0x1D)
+    uint8_t dlpf_accel[2] = {0x1D, 0x03};
+    i2c_write_blocking(I2C_PORT, 0x68, dlpf_accel, 2, false);
+
+    // Optional: you can sleep a bit for safety
+    sleep_ms(50);
 }
 
 typedef struct { float x, y, z; } vec3;
@@ -134,8 +147,8 @@ static inline float pd_update(pd_t *pd, float error, float dt) {
 // -----------------------------
 // Globalne regulatory PD
 // -----------------------------
-pd_t pd_roll  = { .kp = 0.7f, .kd = 0.3f, .last_error = 0.0f };
-pd_t pd_pitch = { .kp = 0.7f, .kd = 0.3f, .last_error = 0.0f };
+pd_t pd_roll  = { .kp = 2.0f, .kd = 0.3f, .last_error = 0.0f };
+pd_t pd_pitch = { .kp = 2.0f, .kd = 0.3f, .last_error = 0.0f };
 
 // -----------------------------
 // Funkcja sterowania PD + mixer
@@ -161,15 +174,20 @@ engines calculate_speed_pd(
     float roll_corr  = pd_update(&pd_roll,  roll_error,  dt);
     float pitch_corr = pd_update(&pd_pitch, pitch_error, dt);
 
+    if(roll_corr > 4) roll_corr = 4;
+    if(roll_corr < -4) roll_corr = -4;
+    if(pitch_corr > 4) pitch_corr = 4;
+    if(pitch_corr < -4) pitch_corr = -4;
+
     printf("x %6.3f,  y %6.3f", roll_corr, pitch_corr);
 
     engines eng;
 
     // Mixer dopasowany do układu B D / A C
-    eng.a = base.a + roll_corr - pitch_corr;   // tył-lewo
-    eng.b = base.b - roll_corr - pitch_corr;   // przód-lewo
-    eng.c = base.c + roll_corr + pitch_corr;   // tył-prawo
-    eng.d = base.d - roll_corr + pitch_corr;   // przód-prawo
+    eng.a = (int)roundf(base.a + roll_corr - pitch_corr);   // tył-lewo
+    eng.b = (int)roundf(base.b - roll_corr - pitch_corr);   // przód-lewo
+    eng.c = (int)roundf(base.c + roll_corr + pitch_corr);   // tył-prawo
+    eng.d = (int)roundf(base.d - roll_corr + pitch_corr);   // przód-prawo
 
     // eng.a = 100;
     // eng.b = 100;
@@ -235,8 +253,8 @@ void steer_by_orientation() {
 
         lastx = currentx;
         lasty = currenty;
-        currentx = lastx + 0.1f * (accel.x - lastx);
-        currenty = lasty + 0.1f * (accel.y - lasty);
+        currentx = lastx + 0.15f * (accel.x - lastx);
+        currenty = lasty + 0.15f * (accel.y - lasty);
 
         // buf_x[idx] = currentx;
         // idx = (idx+1) % 5;
