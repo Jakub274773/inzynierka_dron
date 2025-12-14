@@ -87,23 +87,20 @@ void init_i2c() {
     gpio_pull_up(PICO_DEFAULT_I2C_SDA_PIN);
     gpio_pull_up(PICO_DEFAULT_I2C_SCL_PIN);
     sleep_ms(200);
-
-    // Wake MPU6500
+    
     uint8_t wake_cmd[2] = {0x6B, 0x00};
     i2c_write_blocking(I2C_PORT, 0x68, wake_cmd, 2, false);
     sleep_ms(100);
 
-    // Set Gyro DLPF = 41 Hz   (CONFIG register 0x1A)
-    uint8_t dlpf_gyro[2] = {0x1A, 0x03};
+    uint8_t dlpf_gyro[2] = {0x1A, 0x02};
     i2c_write_blocking(I2C_PORT, 0x68, dlpf_gyro, 2, false);
 
-    // Set Accel DLPF = 41 Hz  (ACCEL_CONFIG2 register 0x1D)
-    uint8_t dlpf_accel[2] = {0x1D, 0x03};
+    uint8_t dlpf_accel[2] = {0x1D, 0x02};
     i2c_write_blocking(I2C_PORT, 0x68, dlpf_accel, 2, false);
 
-    // Optional: you can sleep a bit for safety
     sleep_ms(50);
 }
+
 
 typedef struct { float x, y, z; } vec3;
 typedef struct { uint16_t a, b, c, d; } engines;
@@ -147,8 +144,8 @@ static inline float pd_update(pd_t *pd, float error, float dt) {
 // -----------------------------
 // Globalne regulatory PD
 // -----------------------------
-pd_t pd_roll  = { .kp = 2.0f, .kd = 0.3f, .last_error = 0.0f };
-pd_t pd_pitch = { .kp = 2.0f, .kd = 0.3f, .last_error = 0.0f };
+pd_t pd_roll  = { .kp = 0.1f, .kd = 0.4f, .last_error = 0.0f };
+pd_t pd_pitch = { .kp = 0.1f, .kd = 0.4f, .last_error = 0.0f };
 
 // -----------------------------
 // Funkcja sterowania PD + mixer
@@ -174,10 +171,10 @@ engines calculate_speed_pd(
     float roll_corr  = pd_update(&pd_roll,  roll_error,  dt);
     float pitch_corr = pd_update(&pd_pitch, pitch_error, dt);
 
-    if(roll_corr > 4) roll_corr = 4;
-    if(roll_corr < -4) roll_corr = -4;
-    if(pitch_corr > 4) pitch_corr = 4;
-    if(pitch_corr < -4) pitch_corr = -4;
+    if(roll_corr > 4.5) roll_corr = 4.5;
+    if(roll_corr < -4.5) roll_corr = -4.5;
+    if(pitch_corr > 4.5) pitch_corr = 4.5;
+    if(pitch_corr < -4.5) pitch_corr = -4.5;
 
     printf("x %6.3f,  y %6.3f", roll_corr, pitch_corr);
 
@@ -194,10 +191,10 @@ engines calculate_speed_pd(
     // eng.c = 100;
     // eng.d = 100;
 
-    if (eng.a > 300) eng.a = 300;
-    if (eng.b > 300) eng.b = 300;
-    if (eng.c > 300) eng.c = 300;
-    if (eng.d > 300) eng.d = 300;
+    if (eng.a > 600) eng.a = 600;
+    if (eng.b > 600) eng.b = 600;
+    if (eng.c > 600) eng.c = 600;
+    if (eng.d > 600) eng.d = 600;
 
     if (eng.a < 100) eng.a = 100;
     if (eng.b < 100) eng.b = 100;
@@ -253,8 +250,8 @@ void steer_by_orientation() {
 
         lastx = currentx;
         lasty = currenty;
-        currentx = lastx + 0.15f * (accel.x - lastx);
-        currenty = lasty + 0.15f * (accel.y - lasty);
+        currentx = lastx + 0.1f * (accel.x - lastx);
+        currenty = lasty + 0.1f * (accel.y - lasty);
 
         // buf_x[idx] = currentx;
         // idx = (idx+1) % 5;
@@ -298,8 +295,6 @@ void steer_by_orientation() {
         //     gyro.x, gyro.y, gyro.z);
         printf("engine1 %d, engine2 %d, engine3 %d, engine4 %d\n",
             val1, val2, val3, val4);
-
-        sleep_ms(1);
     }
 }
 
