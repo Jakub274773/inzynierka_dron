@@ -221,8 +221,8 @@ typedef struct {
     float kp,kd,last;
 } pd_t;
 
-pd_t pd_roll  = {0.8f, 0.45f,0};
-pd_t pd_pitch = {0.8f, 0.45f,0};
+pd_t pd_roll  = {0.1f, 0.2f,0};
+pd_t pd_pitch = {0.1f, 0.2f,0};
 
 static inline float pd_update(pd_t *pd,float e,float dt){
     float d = (e - pd->last)/dt;
