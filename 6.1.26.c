@@ -333,12 +333,12 @@ typedef struct {
 } pid_t;
 
 // ANGLE loop
-float kp_angle = 4.0f;        // rad/s per rad
+float kp_angle = 3.5f;        // rad/s per rad
 float max_rate = 3.5f;        // rad/s
 
 // RATE loop
 pid_t pid_roll = {
-    .kp = 32.0f,
+    .kp = 28.0f,
     .ki = 1.2f,
     .kd = 0.25f,
     .integrator = 0,
@@ -348,7 +348,7 @@ pid_t pid_roll = {
 };
 
 pid_t pid_pitch = {
-    .kp = 32.0f,
+    .kp = 28.0f,
     .ki = 1.2f,
     .kd = 0.25f,
     .integrator = 0,
