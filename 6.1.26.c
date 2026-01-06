@@ -400,7 +400,7 @@ static inline float pid_rate_update(
 
     // 4. Inteligentny I-term (na podstawie rate_target)
     if (fabsf(rate_target) < 0.70f) { 
-        pid->integrator += 0.50f * error * dt;
+        pid->integrator += 0.40f * error * dt;
         pid->integrator *= 0.99998f; // Delikatny leak dla stabilności zera
     } 
     
